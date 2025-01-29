@@ -16,7 +16,9 @@ async fn main() {
         .await
         .expect("Failed to bind TCP listener");
     println!("Server listening on {}", addr);
-    let listener_http = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener_http = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
 
     // Broadcast channel for shutdown signal
     let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
@@ -44,7 +46,6 @@ async fn main() {
                 println!("Shutting down server...");
                 break;
             }
-
             _ = signal::ctrl_c() => {
                 shutdown_tx
                 .send(())
