@@ -1,3 +1,6 @@
+use std::future::IntoFuture;
+
+use axum::{routing::get, Router};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
@@ -13,9 +16,21 @@ async fn main() {
         .await
         .expect("Failed to bind TCP listener");
     println!("Server listening on {}", addr);
+    let listener_http = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
     // Broadcast channel for shutdown signal
     let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
+
+    // build our application with a route
+    let app = Router::new()
+        // `GET /` goes to `root`
+        .route("/", get("Hello"));
+    // `POST /users` goes to `create_user`
+
+    // run our app with hyper, listening globally on port 3000
+
+    let http_server = axum::serve(listener_http, app);
+    tokio::spawn(http_server.into_future());
 
     // Accept incoming connections
     loop {
@@ -29,6 +44,7 @@ async fn main() {
                 println!("Shutting down server...");
                 break;
             }
+
             _ = signal::ctrl_c() => {
                 shutdown_tx
                 .send(())
