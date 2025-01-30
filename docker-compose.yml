@@ -1,0 +1,37 @@
+services:
+  rust-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: newsfeed
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://newsfeed_user:user_password@db:5432/mydatabase
+    ports:
+      - "3000:3000" # Expose the Rust app on port 8080
+    restart: unless-stopped
+
+  db:
+    image: postgres:latest
+    container_name: postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: newsfeed_user
+      POSTGRES_PASSWORD: user_password
+      POSTGRES_DB: newsfeed_db
+      PGDATA: /var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newsfeed_user -d newsfeed_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+    driver: local
