@@ -1,4 +1,5 @@
-use serde::Serialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::{env, future::IntoFuture, sync::Arc};
 
 use axum::{extract::State, routing::get, Json, Router};
@@ -10,7 +11,7 @@ use tokio::{
     sync::broadcast,
     task,
 };
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::{Client, NoTls, Row};
 
 struct Config {
     http_server_addr: String,
@@ -36,10 +37,54 @@ struct AppState {
     db_client: Client,
 }
 
-#[derive(Serialize)]
-struct Subscribed {
-    id: i32,
-    name: String,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Subscription {
+    pub id: i32,
+    pub label: String,
+    pub user_id: i32,
+    pub url: String,
+    pub subscription_type: SubscriptionType,
+    pub polling_interval: i32,               // in seconds
+    pub last_checked: Option<DateTime<Utc>>, // Nullable timestamp
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SubscriptionType {
+    Webpage,
+    Rss,
+    Api,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Article {
+    pub id: i32,
+    pub subscription_id: i32,
+    pub title: String,
+    pub content: Option<String>,    // Nullable field
+    pub source_url: Option<String>, // Nullable field
+    pub unique_identifier: String,
+    pub published_at: Option<DateTime<Utc>>, // Nullable field
+    pub fetched_at: DateTime<Utc>,           // Defaults to the current timestamp
+    pub data: Option<Json>,                  // JSONB data (can be NULL)
+}
+
+impl Article {
+    // Helper function to map a tokio_postgres row to a Rust struct
+    pub fn from_row(row: &Row) -> Self {
+        Article {
+            id: row.get("id"),
+            subscription_id: row.get("subscription_id"),
+            title: row.get("title"),
+            content: row.get("content"),
+            source_url: row.get("source_url"),
+            unique_identifier: row.get("unique_identifier"),
+            published_at: row.get("published_at"),
+            fetched_at: row.get("fetched_at"),
+            data: row.get("data"),
+        }
+    }
 }
 
 #[tokio::main]
@@ -78,7 +123,7 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get("Hello"))
-        .route("/subscribed", get(get_items))
+        .route("/subscriptions", get(get_items))
         .with_state(shared_state);
     // `POST /users` goes to `create_user`
 
@@ -109,18 +154,29 @@ async fn main() {
 }
 
 #[debug_handler]
-async fn get_items(State(state): State<Arc<AppState>>) -> Json<Vec<Subscribed>> {
+async fn get_items(State(state): State<Arc<AppState>>) -> Json<Vec<Subscription>> {
     let rows = state
         .db_client
-        .query("SELECT id, name FROM subscribed", &[])
+        .query("SELECT * FROM subscriptions", &[])
         .await
         .unwrap();
 
-    let items: Vec<Subscribed> = rows
+    let items: Vec<Subscription> = rows
         .iter()
-        .map(|row| Subscribed {
-            id: row.get(0),
-            name: row.get(1),
+        .map(|row| Subscription {
+            id: row.get("id"),
+            label: row.get("label"),
+            user_id: row.get("user_id"),
+            url: row.get("url"),
+            subscription_type: match row.get::<_, String>("type").as_str() {
+                "webpage" => SubscriptionType::Webpage,
+                "rss" => SubscriptionType::Rss,
+                "api" => SubscriptionType::Api,
+                _ => panic!("Invalid subscription type"),
+            },
+            polling_interval: row.get("polling_interval"),
+            last_checked: row.get("last_checked"),
+            created_at: row.get("created_at"),
         })
         .collect();
 
