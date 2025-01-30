@@ -9,7 +9,7 @@
 GRANT ALL PRIVILEGES ON DATABASE newsfeed_db TO newsfeed_user;
 
 
-CREATE TABLE items (
+CREATE TABLE subscribed (
     id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL
+    name TEXT NOT NULL
 );

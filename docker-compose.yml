@@ -7,9 +7,10 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://newsfeed_user:user_password@db:5432/mydatabase
+      DATABASE_URL: postgres://newsfeed_user:user_password@db:5432/newsfeed_db
+      HTTP_SERVER_ADDR: "0.0.0.0:8080"
     ports:
-      - "3000:3000" # Expose the Rust app on port 8080
+      - "8080:8080" # Expose the Rust app on port 8080
     restart: unless-stopped
 
   db:
